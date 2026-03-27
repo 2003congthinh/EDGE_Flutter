@@ -249,6 +249,8 @@ class FacePainter extends CustomPainter {
   final List<dynamic> facesList;
   final Size cameraSize; // raw resolution of the camera frame
 
+  
+
   FacePainter({required this.facesList, required this.cameraSize});
 
   @override
