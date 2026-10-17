@@ -11,6 +11,7 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+project_guide/
 
 # IntelliJ related
 *.iml
@@ -43,3 +44,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+OperatorPass Build Plan.html

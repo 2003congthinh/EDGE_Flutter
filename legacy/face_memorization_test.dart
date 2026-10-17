@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_vision/flutter_vision.dart';
-import 'package:flutter/src/rendering/custom_paint.dart';
 import 'package:ultralytics_yolo/yolo.dart';
+
+import 'package:edge_device/helpers/FacePainter.dart';
+import 'package:edge_device/helpers/CropAndSave.dart';
 
 class FaceMemorizationTest extends StatefulWidget {
   const FaceMemorizationTest({super.key});
@@ -24,6 +26,7 @@ class _FaceMemorizationTestState extends State<FaceMemorizationTest> {
   int _selectedCameraIndex = 0;
 
   bool _isProcessing = false;
+  bool _isCapturingFace = false;
   YOLO? yolo;
   List<dynamic> results = [];
   // This is for safe disposing, camera is capturing 30 frames a second, there is almost certainly a frame already inside the native C++ background thread being processed when hit back.
@@ -47,7 +50,7 @@ class _FaceMemorizationTestState extends State<FaceMemorizationTest> {
     await vision.loadYoloModel(
         labels: 'assets/labels.txt',
         modelPath: 'assets/yolo11.tflite',
-        modelVersion: "yolov11",
+        modelVersion: "yolov8",
         numThreads: 1,
         useGpu: false
     );
@@ -78,6 +81,7 @@ class _FaceMemorizationTestState extends State<FaceMemorizationTest> {
     if (_isDisposing || _isProcessing) return;
     _isProcessing = true;
 
+    // YOLO predicts
     try {
       final result = await vision.yoloOnFrame(
           bytesList: image.planes.map((plane) => plane.bytes).toList(),
@@ -87,6 +91,39 @@ class _FaceMemorizationTestState extends State<FaceMemorizationTest> {
           confThreshold: 0.4,
           classThreshold: 0.5
       );
+
+      // Crop and save image
+      // if (result.isNotEmpty) {
+      //   var face = result[0];
+      //   double confidence = face['score'];
+      //
+      //   // Trigger crop if YOLO is over 85% sure and we aren't already capturing
+      //   if (confidence > 0.85) {
+      //     try {
+      //       // 1. Take a clean, high-res photo using the CameraController
+      //       final XFile photo = await _controller!.takePicture();
+      //
+      //       // 2. Pass the photo path and the YOLO box to your backend function
+      //       String? savedFacePath = await cropAndSaveFace(
+      //         sourceImagePath: photo.path,
+      //         yoloBox: face['box'],
+      //         userId: "NewUser", // You can prompt the user for this name later
+      //       );
+      //
+      //       if (savedFacePath != null) {
+      //         print("Success! Proceed to recognition phase.");
+      //       }
+      //
+      //     } catch (e) {
+      //       print("Error capturing image: $e");
+      //     } finally {
+      //       // Unlock after 5 seconds to prevent spamming
+      //       Future.delayed(const Duration(seconds: 5), () {
+      //         if (mounted) _isCapturingFace = false;
+      //       });
+      //     }
+      //   }
+      // }
 
       if (mounted) {
         setState(() {
@@ -245,51 +282,3 @@ class _FaceMemorizationTestState extends State<FaceMemorizationTest> {
   }
 }
 
-class FacePainter extends CustomPainter {
-  final List<dynamic> facesList;
-  final Size cameraSize; // raw resolution of the camera frame
-
-  
-
-  FacePainter({required this.facesList, required this.cameraSize});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // calculate how much the camera image was stretched to fit the screen
-    final double scaleX = size.width / cameraSize.width;
-    final double scaleY = size.height / cameraSize.height;
-
-    Paint p = Paint();
-    p.color = Colors.red;
-    p.style = PaintingStyle.stroke;
-    p.strokeWidth = 4.0;
-
-    for (var face in facesList) {
-      // flutter_vision returns the bounding box as an array: [left, top, right, bottom]
-      List<dynamic> box = face['box'];
-
-      // Multiply the raw YOLO coordinates by the screen scale
-      double left = box[0].toDouble() * scaleX;
-      double top = (cameraSize.height - box[1].toDouble()) * scaleY;
-      double right = box[2].toDouble() * scaleX;
-      double bottom = (cameraSize.height - box[3].toDouble()) * scaleY;
-
-      Rect rect = Rect.fromLTRB(left, top, right, bottom);
-      canvas.drawRect(rect, p);
-
-      // show the confidence score above the box
-      TextSpan span = TextSpan(
-        style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold),
-        text: "${(face['score'] * 100).toStringAsFixed(0)}%",
-      );
-      TextPainter tp = TextPainter(text: span, textAlign: TextAlign.left, textDirection: TextDirection.ltr);
-      tp.layout();
-      tp.paint(canvas, Offset(left, top - 20));
-    }
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return true; // We want to repaint every time a new frame arrives
-  }
-}
